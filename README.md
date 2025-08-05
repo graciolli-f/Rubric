@@ -6,7 +6,7 @@ https://rubric.midspiral.com
 
 
 ## How to Use
-Note: Rubric is currently only set up to work in the **Cursor IDE** since it relies heavily on the `.cursorrules` file to enforce the workflow and process necessary to incorporate Rubric into the code generation. 
+Note: Rubric is currently only set up to work in the **Cursor IDE** since it relies heavily on the `.cursorrules` file to drive the workflow and process necessary to incorporate Rubric into the code generation. 
 
 ### The Rubric set up consists of two parts
 - `rubric/` folder in project root: This is a folder that contains all Rubric-related reference files (found in this repo) needed for the LLM to properly incorporate Rubric into its code generation process
@@ -51,7 +51,7 @@ After you prompt (for example, with a feature request), the AI will automaticall
 
 ## Notes
 - Using Rubric in Cursor increases number of tokens used in a single request
-- The `DesignSystem.rux` file is optional
+- The `DesignSystem.rux` file is optional. The Rubric design system guides the LLM to create a tokens.css file as a source of truth for styling. If you have an established or preferred design system, you may choose to modify the file to fit your needs or remove it entirely. 
 
 ## Who's behind Rubric?
 Rubric was created by [Fernanda Graciolli](https://github.com/graciolli-f) and is a product of [Midspiral](https://midspiral.com). Reach out with questions or comments to hello@midspiral.com.
