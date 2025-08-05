@@ -1,0 +1,86 @@
+module [ProviderName]Provider {
+  @ "React Context Provider for [feature/cross-cutting concern]"
+  @ "Provides [what it provides] to child components"
+
+  type: "provider"
+  
+  location: "src/providers/[ProviderName]Provider.tsx"
+  
+  interface {
+    @ "Provider component"
+    public [ProviderName]Provider(props: {
+      children: React.ReactNode,
+      [configProp]?: [ConfigType]
+    }) -> JSX.Element
+    
+    @ "Context hook"
+    public use[ProviderName]() -> {
+      [stateValue]: [StateType],
+      [actionMethod]: ([param]: [ParamType]) -> void
+    }
+    
+    @ "Optional HOC"
+    public with[ProviderName]<T>(Component: React.ComponentType<T>) -> React.ComponentType<T>
+  }
+  
+  state {
+    @ "Context value shape"
+    private contextValue: {
+      [stateField]: [StateType],
+      [actionField]: [ActionType]
+    }
+    
+    @ "Provider internal state"
+    private _initialized: boolean
+  }
+  
+  imports {
+    @ "React for context"
+    allow "react" as external
+    
+    @ "Can use stores for state"
+    allow "../stores/[store]" as {use[Store]}
+    
+    @ "Can use services"
+    allow "../services/[service]" as {[service]}
+    
+    @ "Can use hooks"
+    allow "../hooks/[hook]" as {use[Hook]}
+    
+    @ "Types"
+    allow "../types" as types
+    
+    @ "Cannot import components (except children)"
+    deny imports ["../components/*"]
+    
+    @ "Cannot import data layer"
+    deny imports ["../data/*"]
+  }
+  
+  constraints {
+    @ "Provider patterns"
+    require pattern.context_api
+    require pattern.default_value
+    require pattern.error_boundary @ "Catch provider errors"
+    
+    @ "Hook must check context"
+    require pattern.context_check @ "Throw if used outside provider"
+    
+    @ "Performance"
+    require pattern.memoized_value @ "Prevent unnecessary renders"
+    
+    @ "Minimal logic"
+    deny pattern.complex_logic @ "Delegate to hooks/services"
+    
+    @ "Side effects"
+    allow pattern.setup_effects @ "Initial setup only"
+    require pattern.cleanup_effects
+    
+    @ "Export restrictions"
+    deny exports ["Context", "_*"]
+    
+    @ "Size constraints"
+    warn file.lines > 150
+    deny file.lines > 250
+  }
+}

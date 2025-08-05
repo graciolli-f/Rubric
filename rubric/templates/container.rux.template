@@ -1,0 +1,72 @@
+module [ContainerName] {
+  @ "Container component that orchestrates [feature/section]"
+  @ "Manages UI state and coordinates child components"
+
+  type: "container"
+  
+  location: "src/components/[ContainerName].tsx"
+  
+  interface {
+    @ "Default export for the container component"
+    public default [ContainerName]() -> JSX.Element
+  }
+  
+  state {
+    @ "Local UI state only - complex state should be in stores"
+    private selectedItem: string?
+    private isModalOpen: boolean
+    private viewMode: "list" | "grid"
+  }
+  
+  imports {
+    @ "React and UI libraries"
+    allow "react" as external
+    allow "@mui/material" as external
+    allow "lucide-react" as external
+    
+    @ "Can import child components for composition"
+    allow "./[ItemComponent]" as {[ItemComponent]}
+    allow "./[ItemEditComponent]" as {[ItemEditComponent]}
+    allow "./[ModalComponent]" as {[ModalComponent]}
+    
+    @ "Can import from stores for data"
+    allow "../stores/[relevant-store]" as {use[Store]}
+    
+    @ "Can import hooks"
+    allow "../hooks/[relevant-hook]" as {use[Hook]}
+    
+    @ "Utilities for UI formatting"
+    allow "../utils/[format-util]" as {formatters}
+    
+    @ "Type imports"
+    allow "../types" as types
+    
+    @ "Cannot import services or data layers directly"
+    deny imports ["../services/*", "../data/*"]
+  }
+  
+  constraints {
+    @ "No direct API calls"
+    deny io.network.*
+    
+    @ "No direct storage access"
+    deny io.localStorage.*
+    
+    @ "Limited console usage"
+    warn io.console.*
+    
+    @ "No business logic"
+    deny pattern.business_logic
+    
+    @ "Must handle loading and error states from stores"
+    require pattern.error_boundary
+    require pattern.loading_state
+    
+    @ "Accessibility requirements"
+    require pattern.aria_labels
+    
+    @ "Size constraints"
+    warn file.lines > 200
+    deny file.lines > 300
+  }
+}

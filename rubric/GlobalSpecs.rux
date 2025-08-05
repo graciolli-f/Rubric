@@ -1,0 +1,73 @@
+module GlobalSpecs {
+  @ "Global specifications inherited by all components"
+  @ "Defines accessibility, performance, security, style, and code standards"
+
+  type: "specification"
+  
+  @ "This is a meta file that defines base rules - no location needed"
+  
+  interface {
+    @ "Design token enforcement"
+    public type UseDesignTokens
+    
+    @ "Accessibility requirements"
+    public type AccessibilitySpec
+    
+    @ "Performance requirements"  
+    public type PerformanceSpec
+    
+    @ "Security requirements"
+    public type SecuritySpec
+    
+    @ "Code style guidelines"
+    public type CodeStyleSpec
+    
+    @ "Responsive design requirements"
+    public type ResponsiveSpec
+    
+    @ "State management patterns"
+    public type StateManagementSpec
+  }
+  
+  state {
+    @ "Token enforcement rules"
+    private readonly TOKEN_ENFORCEMENT: Object
+  }
+  
+  constraints {
+    @ "Style separation constraints"
+    deny style.inline_styles @ "No style attributes in HTML/JSX"
+    deny style.css_in_js @ "No CSS-in-JS in components"
+    deny style.styled_components @ "No styled-components in component files"
+    require style.external_stylesheet @ "Use dedicated .css/.scss/.less files"
+    require style.css_modules @ "Prefer CSS modules or scoped styles"
+    
+    @ "Accessibility constraints"
+    require pattern.keyboard_navigation
+    require pattern.focus_management
+    require pattern.aria_label
+    require pattern.aria_live
+    require pattern.loading_state
+    require pattern.error_boundary
+    
+    @ "Performance constraints"
+    require pattern.memo
+    require pattern.memoization
+    require pattern.callback_optimization
+    warn pattern.list_virtualization @ "for complex components"
+    
+    @ "Security constraints"
+    require security.input_validation
+    
+    @ "Code style constraints"
+    require style.external_stylesheet @ "Styles must be in separate .css/.scss files"
+    deny style.inline_styles @ "No inline styles in components"
+    deny style.css_in_js @ "No CSS-in-JS objects in component files"
+    require pattern.data_testid @ "For test targeting"
+    
+    @ "State management constraints"
+    require pattern.error_boundary @ "async operations"
+    require pattern.loading_state
+    require pattern.empty_state
+  }
+}

@@ -1,0 +1,82 @@
+module [EntityName]Data {
+  @ "Data access layer for [entity]"
+  @ "Direct API/database calls only, no business logic"
+
+  type: "data"
+  
+  location: "src/data/[entity-name]-data.ts"
+  
+  interface {
+    @ "CRUD operations"
+    public fetch[Entity](id: string) -> Promise<[Entity]>
+    public fetch[Entities](params?: [QueryParams]) -> Promise<[Entity][]>
+    public create[Entity](data: [CreateData]) -> Promise<[Entity]>
+    public update[Entity](id: string, data: [UpdateData]) -> Promise<[Entity]>
+    public delete[Entity](id: string) -> Promise<void>
+    
+    @ "Specialized queries"
+    public fetch[Entity]By[Criteria](value: [ValueType]) -> Promise<[Entity]?>
+    public count[Entities](filters?: [Filters]) -> Promise<number>
+    public exists[Entity](id: string) -> Promise<boolean>
+    
+    @ "Batch operations"
+    public batchCreate[Entities](items: [CreateData][]) -> Promise<[Entity][]>
+    public batchUpdate[Entities](updates: [UpdateBatch][]) -> Promise<[Entity][]>
+  }
+  
+  state {
+    @ "Connection/client references"
+    private client: [DatabaseClient]
+    private apiEndpoint: string
+  }
+  
+  imports {
+    @ "Database/API client"
+    allow "../lib/supabase" as {supabase}
+    allow "../lib/api-client" as {apiClient}
+    allow "axios" as external
+    
+    @ "Types only"
+    allow "../types" as types
+    
+    @ "Data utilities"
+    allow "../utils/query-builder" as {buildQuery}
+    
+    @ "No business logic imports"
+    deny imports ["../services/*", "../stores/*"]
+    
+    @ "No UI imports"
+    deny imports ["../components/*", "../hooks/*"]
+  }
+  
+  constraints {
+    @ "Direct data operations only"
+    require pattern.single_responsibility
+    deny pattern.business_logic
+    deny pattern.data_transformation @ "Return raw data"
+    
+    @ "Error handling"
+    require pattern.throw_on_error @ "Let services handle errors"
+    deny pattern.error_transformation @ "Throw raw errors"
+    
+    @ "No caching at this layer"
+    deny pattern.caching @ "Services handle caching"
+    
+    @ "Logging for debugging"
+    allow io.console.error
+    allow io.console.log when NODE_ENV="development"
+    
+    @ "Network operations allowed"
+    allow io.network.*
+    
+    @ "No validation"
+    deny pattern.validation @ "Services validate"
+    
+    @ "Export restrictions"
+    deny exports ["_*", "client", "apiEndpoint"]
+    
+    @ "Size constraints"
+    warn file.lines > 200
+    deny file.lines > 300
+  }
+}

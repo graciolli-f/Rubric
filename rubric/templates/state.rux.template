@@ -1,0 +1,94 @@
+module [StoreName]Store {
+  @ "State management for [feature/domain]"
+  @ "Coordinates between UI and services"
+
+  type: "store"
+  
+  location: "src/stores/[store-name]-store.ts"
+  
+  interface {
+    @ "Zustand store hook"
+    public use[StoreName]Store() -> {
+      @ "State"
+      items: [Item][],
+      currentItem: [Item]?,
+      isLoading: boolean,
+      error: string?,
+      filters: [FilterType],
+      
+      @ "Actions"
+      fetchItems: () -> Promise<void>,
+      fetchItem: (id: string) -> Promise<void>,
+      createItem: (data: [CreateDTO]) -> Promise<void>,
+      updateItem: (id: string, data: [UpdateDTO]) -> Promise<void>,
+      deleteItem: (id: string) -> Promise<void>,
+      
+      @ "UI state actions"
+      setFilters: (filters: [FilterType]) -> void,
+      clearError: () -> void,
+      reset: () -> void
+    }
+  }
+  
+  state {
+    @ "Internal state shape"
+    private _items: [Item][]
+    private _currentItem: [Item]?
+    private _isLoading: boolean
+    private _error: string?
+    private _filters: [FilterType]
+    
+    @ "Optimistic update tracking"
+    private _optimisticUpdates: Map<string, [Item]>
+  }
+  
+  imports {
+    @ "State management library"
+    allow "zustand" as external
+    allow "immer" as external
+    
+    @ "Service layer for business logic"
+    allow "../services/[entity]-service" as {[entityService]}
+    
+    @ "Types"
+    allow "../types" as types
+    
+    @ "Error handling"
+    allow "../utils/errors" as {formatError}
+    
+    @ "Cannot import data layer directly"
+    deny imports ["../data/*"]
+    
+    @ "Cannot import components"
+    deny imports ["../components/*"]
+  }
+  
+  constraints {
+    @ "State management patterns"
+    require pattern.immutable_updates
+    require pattern.action_error_handling
+    
+    @ "No business logic - delegate to services"
+    deny pattern.complex_calculations
+    deny pattern.validation_logic
+    
+    @ "API calls only through services"
+    deny io.network.*
+    
+    @ "Storage through services"
+    deny io.localStorage.* @ "Use service layer for persistence"
+    
+    @ "DevTools support"
+    allow io.console.* when NODE_ENV="development"
+    
+    @ "Performance"
+    require pattern.selector_memoization
+    
+    @ "Export restrictions"
+    deny exports ["_*"]
+    
+    @ "Size constraints"
+    warn file.lines > 200
+    deny file.lines > 400
+  }
+}

@@ -1,0 +1,248 @@
+# Rubric Architecture Definition
+# This file defines the layers, rules, and relationships for the codebase
+
+rubric:
+  version: "1.0"
+  strict_mode: true
+  
+layers:
+  # UI Layer - React Components
+  components:
+    path: "src/components"
+    allowed_types: ["container", "presentation"]
+    can_import: ["stores", "hooks", "utils", "types", "providers", "guards"]
+    cannot_import: ["services", "data"]
+    rules:
+      - "Presentation components must be pure and props-only"
+      - "Container components orchestrate but don't contain business logic"
+      - "No direct API calls - use stores"
+      - "No complex state management beyond local UI state"
+      - "Can import child components for composition"
+  
+  # State Management Layer
+  stores:
+    path: "src/stores"
+    allowed_types: ["store"]
+    can_import: ["services", "types", "utils"]
+    cannot_import: ["components", "data", "providers", "guards"]
+    rules:
+      - "Manages application state using Zustand"
+      - "Calls services for all data operations"
+      - "No direct API calls - use services"
+      - "Handles optimistic updates"
+      - "Provides error and loading states"
+  
+  # Business Logic Layer
+  services:
+    path: "src/services"
+    allowed_types: ["service"]
+    can_import: ["data", "types", "utils"]
+    cannot_import: ["components", "stores", "hooks", "providers", "guards"]
+    rules:
+      - "Contains all business logic and validation"
+      - "Orchestrates data layer calls"
+      - "Transforms errors for UI consumption"
+      - "Manages caching strategies"
+      - "Enforces business rules"
+  
+  # Data Access Layer
+  data:
+    path: "src/data"
+    allowed_types: ["data"]
+    can_import: ["types", "lib"]
+    cannot_import: ["components", "stores", "services", "hooks", "utils"]
+    rules:
+      - "Direct API/database calls only"
+      - "No business logic or validation"
+      - "Returns raw data or throws raw errors"
+      - "No caching - services handle that"
+      - "Single responsibility per module"
+  
+  # Reusable Logic Layer
+  hooks:
+    path: "src/hooks"
+    allowed_types: ["hook"]
+    can_import: ["stores", "services", "utils", "types"]
+    cannot_import: ["components", "data", "providers"]
+    rules:
+      - "Custom React hooks only"
+      - "Can compose other hooks"
+      - "Encapsulates reusable logic"
+      - "Must follow React hooks rules"
+      - "Handles cleanup properly"
+  
+  # Pure Functions Layer
+  utils:
+    path: "src/utils"
+    allowed_types: ["utility"]
+    can_import: ["types"]
+    cannot_import: ["*"]
+    rules:
+      - "Pure functions only - no side effects"
+      - "Deterministic outputs"
+      - "No external dependencies except types"
+      - "Well-documented with JSDoc"
+      - "Highly testable"
+  
+  # Context Providers Layer
+  providers:
+    path: "src/providers"
+    allowed_types: ["provider"]
+    can_import: ["stores", "services", "hooks", "types", "utils"]
+    cannot_import: ["components", "data", "guards"]
+    rules:
+      - "React context providers only"
+      - "App-level or feature-level providers"
+      - "Minimal logic - delegate to hooks/services"
+      - "Memoize context values"
+      - "Provide error boundaries"
+  
+  # Route Protection Layer
+  guards:
+    path: "src/guards"
+    allowed_types: ["guard"]
+    can_import: ["stores", "types", "hooks"]
+    cannot_import: ["components", "services", "data", "providers"]
+    rules:
+      - "Route protection logic only"
+      - "Access control checks"
+      - "Secure by default"
+      - "Show loading states"
+      - "Graceful fallbacks"
+  
+  # Type Definitions
+  types:
+    path: "src/types"
+    allowed_types: ["utility"] # Types use utility template
+    can_import: []
+    cannot_import: ["*"]
+    rules:
+      - "TypeScript types and interfaces only"
+      - "No runtime code"
+      - "Shared across all layers"
+      - "Well-documented"
+  
+  # External Libraries
+  lib:
+    path: "src/lib"
+    allowed_types: ["utility"]
+    can_import: ["types"]
+    cannot_import: ["components", "stores", "services", "hooks"]
+    rules:
+      - "External library configurations"
+      - "API client setup"
+      - "Database client setup"
+      - "Third-party integrations"
+
+# Special handling for cross-cutting concerns
+special_cases:
+  # Authentication is everywhere
+  auth:
+    exception: "cross-cutting-concern"
+    relaxed_rules:
+      - "useAuth hook can be imported directly in components"
+      - "AuthGuard can be used at route level"
+      - "AuthProvider wraps entire app"
+      - "Auth state can be accessed globally"
+  
+  # Root components have special privileges
+  root_components:
+    applies_to: ["App.tsx", "Layout.tsx", "*Page.tsx", "Root.tsx"]
+    relaxed_rules:
+      - "Can import and use providers"
+      - "Can import and compose guards"
+      - "Can orchestrate multiple stores"
+      - "Can handle top-level routing"
+      - "Can set up global error boundaries"
+  
+  # Form components need extra flexibility
+  form_components:
+    applies_to: ["*Form.tsx", "*Modal.tsx"]
+    relaxed_rules:
+      - "Can have complex local state for form management"
+      - "Can perform client-side validation"
+      - "Can use multiple hooks for form logic"
+  
+  # Development tools
+  dev_tools:
+    applies_to: ["*.dev.ts", "*.debug.ts"]
+    when: "NODE_ENV=development"
+    relaxed_rules:
+      - "Can use console.log"
+      - "Can access window object"
+      - "Can import from any layer for debugging"
+
+# Validation rules
+validation:
+  # These cause build failures
+  strict_errors:
+    - id: "no-api-in-components"
+      pattern: "fetch|axios|$.ajax in components/"
+      message: "Components cannot make API calls directly"
+    
+    - id: "no-business-logic-in-presentation"
+      pattern: "calculate|validate|transform in presentation components"
+      message: "Business logic must be in services"
+    
+    - id: "no-direct-db-access"
+      pattern: "supabase|firebase|mongodb outside data/"
+      message: "Database access only in data layer"
+  
+  # These show warnings
+  warnings:
+    - id: "complex-component"
+      pattern: "component > 200 lines"
+      message: "Component is getting complex, consider splitting"
+    
+    - id: "many-stores"
+      pattern: "> 2 store imports in component"
+      message: "Component uses many stores, consider a facade"
+    
+    - id: "deep-nesting"
+      pattern: "> 3 levels of component nesting"
+      message: "Deep nesting makes components hard to maintain"
+
+# Architecture principles
+principles:
+  - name: "Unidirectional Data Flow"
+    description: "Data flows: Component → Store → Service → Data → API"
+    
+  - name: "Separation of Concerns"
+    description: "Each layer has a single, well-defined responsibility"
+    
+  - name: "Dependency Rule"
+    description: "Dependencies point inward: UI → State → Business → Data"
+    
+  - name: "Abstraction Principle"
+    description: "Higher layers are more abstract than lower layers"
+    
+  - name: "Testability"
+    description: "Each layer can be tested in isolation"
+
+# File naming conventions
+naming:
+  components:
+    presentation: "[ComponentName].tsx"
+    container: "[FeatureName]Container.tsx"
+  stores: "[feature]-store.ts"
+  services: "[entity]-service.ts"
+  data: "[entity]-data.ts"
+  hooks: "use[HookName].ts"
+  utils: "[utility-name].ts"
+  types: "[domain].types.ts"
+  providers: "[Name]Provider.tsx"
+  guards: "[Name]Guard.tsx"
+
+# When to create new modules vs extending existing
+module_creation:
+  create_new_when:
+    - "New feature area or domain"
+    - "Current module exceeds size limits"
+    - "Different permission requirements"
+    - "Reusable across features"
+  
+  extend_existing_when:
+    - "Closely related functionality"
+    - "Shared state requirements"
+    - "Same permission model"
+    - "Under size limits"

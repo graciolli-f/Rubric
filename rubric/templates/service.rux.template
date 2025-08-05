@@ -1,0 +1,79 @@
+module [ServiceName]Service {
+  @ "Business logic for [domain/feature]"
+  @ "Orchestrates data operations and enforces business rules"
+
+  type: "service"
+  
+  location: "src/services/[service-name]-service.ts"
+  
+  interface {
+    @ "Public service methods"
+    public create[Entity](data: [CreateDTO]) -> Promise<[Entity]>
+    public update[Entity](id: string, data: [UpdateDTO]) -> Promise<[Entity]>
+    public delete[Entity](id: string) -> Promise<void>
+    public get[Entity](id: string) -> Promise<[Entity]>
+    public list[Entities](filters?: [FilterType]) -> Promise<[Entity][]>
+    
+    @ "Business operations"
+    public validate[Entity](data: [EntityData]) -> ValidationResult
+    public calculate[Something](params: [Params]) -> [Result]
+    public process[Operation](data: [Input]) -> Promise<[Output]>
+  }
+  
+  state {
+    @ "Service-level caching"
+    private _cache: Map<string, [Entity]>
+    private _cacheExpiry: Map<string, number>
+    
+    @ "Service configuration"
+    private _config: ServiceConfig
+  }
+  
+  imports {
+    @ "Data layer imports"
+    allow "../data/[entity]-data" as {[entityData]}
+    
+    @ "Other services for composition"
+    allow "./[other]-service" as {[otherService]}
+    
+    @ "Types and interfaces"
+    allow "../types" as types
+    
+    @ "Utilities"
+    allow "../utils/validation" as validators
+    allow "../utils/errors" as {AppError, ErrorCode}
+    
+    @ "External libraries"
+    allow "date-fns" as external
+    allow "zod" as external
+    
+    @ "Cannot import UI or stores"
+    deny imports ["../components/*", "../stores/*"]
+  }
+  
+  constraints {
+    @ "Error handling required"
+    require pattern.try_catch_blocks
+    require pattern.error_transformation
+    
+    @ "No UI concerns"
+    deny pattern.jsx_elements
+    deny imports ["react", "@mui/material"]
+    
+    @ "Business logic validation"
+    require pattern.input_validation
+    require pattern.business_rules
+    
+    @ "Logging for debugging"
+    allow io.console.error
+    allow io.console.warn when NODE_ENV="development"
+    
+    @ "Export only public interface"
+    deny exports ["_*", "cache", "config"]
+    
+    @ "Complexity management"
+    warn file.lines > 300
+    deny file.lines > 500
+    warn function.complexity > 10
+  }
+}
