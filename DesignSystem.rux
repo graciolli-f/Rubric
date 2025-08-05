@@ -1,0 +1,40 @@
+module DesignSystem {
+  @ "Design system token specifications"
+  @ "AI should create/update tokens.css with these custom properties"
+
+  type: "specification"
+  
+  @ "This is a meta file that defines design system rules - no location needed"
+  
+  interface {
+    @ "Token file configuration"
+    public type TokenFile
+    
+    @ "Required token categories"
+    public type RequiredTokens
+    
+    @ "Optional token categories - may or may not be included"
+    public type OptionalTokens
+    
+    @ "AI guidance for token generation"
+    public type AIGuidance
+  }
+  
+  state {
+    @ "File header template"
+    private readonly FILE_HEADER: string
+    
+    @ "Token naming patterns"
+    private readonly NAMING_PATTERNS: Object
+  }
+  
+  constraints {
+    @ "Token requirements"
+    require style.external_stylesheet
+    require style.css_modules
+    
+    @ "Token generation rules"
+    require pattern.defensive
+    require pattern.graceful_fallback
+  }
+}
