@@ -1,0 +1,85 @@
+module [HookName]Hook {
+  @ "Custom React hook for [specific purpose]"
+  @ "Encapsulates reusable logic for [use case]"
+
+  type: "hook"
+  
+  location: "src/hooks/use[HookName].ts"
+  
+  interface {
+    @ "Hook signature"
+    public use[HookName](options?: {
+      [optionName]?: [OptionType],
+      enabled?: boolean,
+      onSuccess?: (data: [DataType]) -> void,
+      onError?: (error: Error) -> void
+    }) -> {
+      data: [DataType]?,
+      error: Error?,
+      isLoading: boolean,
+      refetch: () -> void,
+      [otherReturns]: [Types]
+    }
+  }
+  
+  state {
+    @ "Hook internal state"
+    private cache: Map<string, [CachedData]>
+    private subscribers: Set<() -> void>
+  }
+  
+  imports {
+    @ "React hooks"
+    allow "react" as external
+    
+    @ "Other hooks for composition"
+    allow "./use[OtherHook]" as {use[OtherHook]}
+    
+    @ "Can use stores"
+    allow "../stores/[store]" as {use[Store]}
+    
+    @ "Can use services"
+    allow "../services/[service]" as {[service]}
+    
+    @ "Types"
+    allow "../types" as types
+    
+    @ "Hook utilities"
+    allow "../utils/hooks" as {debounce, throttle}
+    
+    @ "Cannot import components"
+    deny imports ["../components/*"]
+    
+    @ "Cannot import data layer"
+    deny imports ["../data/*"]
+  }
+  
+  constraints {
+    @ "Must follow hooks rules"
+    require pattern.hook_naming @ "Must start with 'use'"
+    require pattern.hook_rules @ "Follow React hooks rules"
+    
+    @ "Error handling"
+    require pattern.error_boundaries
+    
+    @ "Cleanup"
+    require pattern.cleanup_effects @ "Must cleanup subscriptions/timers"
+    
+    @ "Performance"
+    require pattern.dependency_arrays
+    require pattern.memoization when complexity > 5
+    
+    @ "Testing"
+    require pattern.testable @ "Must be testable in isolation"
+    
+    @ "No direct DOM manipulation"
+    deny pattern.direct_dom
+    
+    @ "Export restrictions"
+    deny exports ["_*", "cache"]
+    
+    @ "Size constraints"
+    warn file.lines > 150
+    deny file.lines > 250
+  }
+}
