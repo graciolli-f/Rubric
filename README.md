@@ -1,5 +1,8 @@
 # Rubric
 
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/your-username/rubric/releases)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 A constraint-driven language for enforcing clean architecture in JavaScript/TypeScript projects.
 
 https://rubric.midspiral.com
