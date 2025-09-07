@@ -1,0 +1,15 @@
+{
+  "name": "rubric-validator",
+  "type": "module",
+  "dependencies": {
+    "@typescript-eslint/typescript-estree": "^6.0.0",
+    "@typescript-eslint/visitor-keys": "^6.0.0"
+  },
+  "devDependencies": {
+    "peggy": "^5.0.0"
+  },
+  "scripts": {
+    "build-parser": "peggy -o rux-parser-generated.js simplified-rux.pegjs",
+    "validate": "node validate.js"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "rubric",
+  "type": "module",
+  "version": "1.0.0",
+  "main": "rux-parser-generated.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@typescript-eslint/typescript-estree": "^8.42.0",
+    "@typescript-eslint/visitor-keys": "^8.42.0"
+  }
+}
