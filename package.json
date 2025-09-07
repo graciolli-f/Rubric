@@ -1,0 +1,27 @@
+{
+  "name": "rubric",
+  "version": "1.0.0",
+  "description": "A constraint-driven language for enforcing clean architecture in JavaScript/TypeScript projects",
+  "author": "Fernanda Graciolli",
+  "license": "MIT",
+  "homepage": "https://rubric.midspiral.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/graciolli-f/rubric.git"
+  },
+  "keywords": [
+    "architecture",
+    "constraints",
+    "validation",
+    "clean-code",
+    "typescript",
+    "javascript"
+  ],
+  "type": "module",
+  "main": "rubric/validate.js",
+  "scripts": {
+    "validate": "node rubric/validate.js",
+    "validate:legacy": "node rubric/validate-legacy.js",
+    "version": "echo $npm_package_version"
+  }
+}
