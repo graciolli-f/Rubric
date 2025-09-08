@@ -1,90 +1,51 @@
-module [GuardName]Guard {
-  @ "Route guard for [protection purpose]"
-  @ "Protects routes that require [condition]"
+module GuardNameGuard {
+  @ Route guard for protection purpose
+  @ Protects routes that require condition
 
   type: "guard"
   
-  location: "src/guards/[GuardName]Guard.tsx"
+  location: "src/guards/GuardNameGuard.tsx"
   
   interface {
-    @ "Guard component"
-    public [GuardName]Guard(props: {
-      children: React.ReactNode,
-      fallback?: React.ComponentType,
-      redirectTo?: string,
-      [requiredProp]?: [RequirementType]
-    }) -> JSX.Element
+    @ Guard component
+    function GuardNameGuard() -> JSXElement
     
-    @ "Hook for checking guard condition"
-    public use[GuardName]Check() -> {
-      isAllowed: boolean,
-      isChecking: boolean,
-      reason?: string
-    }
+    @ Hook for checking guard condition
+    function useGuardNameCheck() -> GuardCheckResult
     
-    @ "HOC variant"
-    public require[GuardName]<T>(
-      Component: React.ComponentType<T>,
-      options?: [GuardOptions]
-    ) -> React.ComponentType<T>
+    @ HOC variant
+    function requireGuardName() -> Component
   }
   
   state {
-    @ "Guard state"
-    private _isChecking: boolean
-    private _checkResult: boolean?
-    private _reason: string?
+    @ Guard state
+    private isChecking: boolean
+    private checkResult: boolean
+    private reason: string
   }
   
   imports {
-    @ "React and routing"
     allow "react" as external
-    allow "react-router-dom" as {Navigate, useNavigate}
-    
-    @ "Auth/permission stores"
-    allow "../stores/auth-store" as {useAuthStore}
-    allow "../stores/permission-store" as {usePermissionStore}
-    
-    @ "Types"
-    allow "../types" as types
-    
-    @ "Other guards for composition"
-    allow "./[OtherGuard]Guard" as {[OtherGuard]Guard}
-    
-    @ "Loading component"
-    allow "../components/LoadingSpinner" as {LoadingSpinner}
-    
-    @ "Cannot import services directly"
+    allow "react-router-dom"
+    allow "../stores/auth-store"
+    allow "../stores/permission-store"
+    allow "../types"
+    allow "./OtherGuard"
+    allow "../components/LoadingSpinner"
     deny imports ["../services/*"]
-    
-    @ "Cannot import data layer"
     deny imports ["../data/*"]
   }
   
   constraints {
-    @ "Guard patterns"
-    require pattern.early_return @ "Check and redirect quickly"
-    require pattern.loading_state @ "Show loading while checking"
-    
-    @ "Security"
-    require pattern.secure_by_default @ "Deny unless explicitly allowed"
-    deny pattern.client_side_only @ "Must verify with backend"
-    
-    @ "Performance"
-    require pattern.memoized_check @ "Don't re-check unnecessarily"
-    require pattern.concurrent_render @ "Support React concurrent mode"
-    
-    @ "Navigation"
-    allow pattern.redirect
-    deny pattern.history_manipulation @ "Use declarative navigation"
-    
-    @ "Error handling"
-    require pattern.graceful_failure @ "Don't crash on check failure"
-    
-    @ "Export restrictions"
+    require pattern.early_return
+    require pattern.loading_state
+    require pattern.secure_by_default
+    deny pattern.client_side_only
+    require pattern.memoized_check
+    require pattern.concurrent_render
+    deny pattern.history_manipulation
+    require pattern.graceful_failure
     deny exports ["_*", "checkResult"]
-    
-    @ "Size constraints"
     warn file.lines > 100
     deny file.lines > 200
   }
