@@ -7,8 +7,10 @@ This project uses Rubric (.rux files) to enforce clean architecture. Rubric is a
 For each new module:
 1. CREATE .rux file first (using template) if one does not already exist
 2. Check for and resolve all conflicts within .rux files before continuing
+(DO NOT create multiple files at once - create ONE .rux file at a time and validate it before moving on to the next .rux file)
 3. PLAN code to fit constraints  
 4. WRITE code following the spec
+(DO NOT create all files at once - create one code file at a time and validate it before moving on)
 5. RUN `node rubric/validate.js` → must show "All constraints passed!"
 6. If violations exist → fix code (not .rux files)
 7. Repeat until clean validation
@@ -16,6 +18,8 @@ For each new module:
 ## IMPORTANT: Existing .rux files may only be appended, individual lines may not be modified
 
 **You MUST validate all rux and code changes. And all validation must pass.**
+
+
 
 ## How Rubric Works
 
