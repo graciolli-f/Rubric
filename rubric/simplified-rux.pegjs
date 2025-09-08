@@ -124,18 +124,19 @@ StateProperty
       });
     }
 
-// ============ Imports Block ============
+// ============ Imports Block (UPDATED) ============
 
 Imports
   = "imports" _ "{" _ rules:ImportRules _ "}"
     { return makeNode('Imports', { rules }); }
 
 ImportRules
-  = rules:( _ rule:ImportRule _ { return rule; } )*
+  = rules:( _ rule:ImportRuleOrAnnotation _ { return rule; } )*
     { return rules.filter(r => r !== null); }
 
-ImportRule
-  = AllowRule
+ImportRuleOrAnnotation
+  = Annotation
+  / AllowRule
   / DenyRule
 
 AllowRule
@@ -160,24 +161,40 @@ DenyRule
     exceptions:("except:" _ "[" _ e:PatternList _ "]" { return e; })?
     { return makeNode('DenyRule', { patterns, exceptions: exceptions || [] }); }
 
-// ============ Constraints Block ============
+// ============ Constraints Block (UPDATED) ============
 
 Constraints
   = "constraints" _ "{" _ rules:ConstraintRules _ "}"
     { return makeNode('Constraints', { rules }); }
 
 ConstraintRules
-  = rules:( _ rule:ConstraintRule _ { return rule; } )*
+  = rules:( _ rule:ConstraintRuleOrAnnotation _ { return rule; } )*
     { return rules.filter(r => r !== null); }
 
-ConstraintRule
+ConstraintRuleOrAnnotation
   = Annotation
   / DenyConstraintRule
   / RequireRule
   / WarnRule
 
 DenyConstraintRule
-  = "deny" _ pattern:Pattern _ 
+  = "deny" _ "exports" _ "[" _ patterns:QuotedStringList _ "]" _
+    exceptions:("except:" _ "[" _ e:QuotedStringList _ "]" { return e; })?
+    {
+      return makeNode('DenyExportsRule', {
+        patterns,
+        exceptions: exceptions || []
+      });
+    }
+  / "deny" _ "imports" _ "[" _ patterns:QuotedStringList _ "]" _
+    exceptions:("except:" _ "[" _ e:QuotedStringList _ "]" { return e; })?
+    {
+      return makeNode('DenyImportsRule', {
+        patterns,
+        exceptions: exceptions || []
+      });
+    }
+  / "deny" _ pattern:Pattern _ 
     comparison:Comparison? _
     comment:Comment? _
     exceptions:("except:" _ "[" _ e:PatternList _ "]" { return e; })?
@@ -191,7 +208,15 @@ DenyConstraintRule
     }
 
 RequireRule
-  = "require" _ pattern:Pattern _ 
+  = "require" _ "exports" _ "[" _ patterns:QuotedStringList _ "]" _
+    exceptions:("except:" _ "[" _ e:QuotedStringList _ "]" { return e; })?
+    {
+      return makeNode('RequireExportsRule', {
+        patterns,
+        exceptions: exceptions || []
+      });
+    }
+  / "require" _ pattern:Pattern _ 
     comparison:Comparison? _
     comment:Comment? _
     exceptions:("except:" _ "[" _ e:PatternList _ "]" { return e; })?
@@ -221,8 +246,12 @@ WarnRule
 // ============ Common Patterns ============
 
 PatternList
-  = first:Pattern rest:( _ "," _ pattern:Pattern { return pattern; } )*
+  = first:PatternOrString rest:( _ "," _ pattern:PatternOrString { return pattern; } )*
     { return [first, ...rest]; }
+
+PatternOrString
+  = QuotedString
+  / Pattern
 
 Pattern
   = parts:PatternPart+
@@ -235,6 +264,10 @@ PatternPart
   / "?" { return "?"; }
   / "[" chars:(!"]" char:. { return char; })* "]" 
     { return "[" + chars.join('') + "]"; }
+
+QuotedStringList
+  = first:QuotedString rest:( _ "," _ str:QuotedString { return str; } )*
+    { return [first, ...rest]; }
 
 ImportPath
   = QuotedString
