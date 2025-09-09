@@ -11,5 +11,6 @@
   "scripts": {
     "build-parser": "peggy -o rux-parser-generated.js simplified-rux.pegjs",
     "validate": "node validate.js"
-  }
+  },
+  "version": "1.1.0"
 }
