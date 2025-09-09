@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * Rubric Validation Script with Proper Parser
- * Uses PEG.js grammar to parse .rux files instead of regex
+ * Enhanced Rubric Validator with Multi-Error Detection
+ * Finds multiple syntax errors and still validates TypeScript files
  */
 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { parseRuxFile, extractRulesFromAST, validateFileAgainstRules } from './rux-parser.js';
+import { parseRuxFileWithRecovery, extractRulesFromAST, validateFileAgainstRules } from './rux-parser.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,32 +19,56 @@ const colors = {
   yellow: '\x1b[33m',
   blue: '\x1b[34m',
   cyan: '\x1b[36m',
+  magenta: '\x1b[35m',
   reset: '\x1b[0m'
 };
 
-class RubricValidator {
+class EnhancedRubricValidator {
   constructor() {
+    this.syntaxErrors = [];
     this.violations = [];
     this.checkedFiles = 0;
-    this.parseErrors = [];
+    this.ruxFilesProcessed = 0;
   }
 
-  // Parse a .rux file using the grammar-based parser
+  // Parse a .rux file with error recovery
   parseAndExtractRules(ruxPath) {
     console.log(`${colors.cyan}Parsing ${path.basename(ruxPath)}...${colors.reset}`);
     
-    const parseResult = parseRuxFile(ruxPath);
+    const parseResult = parseRuxFileWithRecovery(ruxPath);
+    this.ruxFilesProcessed++;
     
     if (!parseResult.success) {
-      this.parseErrors.push({
-        file: ruxPath,
-        error: parseResult.error
+      console.log(`${colors.red}✗ Found ${parseResult.errors.length} syntax errors${colors.reset}`);
+      
+      // Store all syntax errors
+      parseResult.errors.forEach(error => {
+        this.syntaxErrors.push({
+          file: ruxPath,
+          error
+        });
       });
-      console.log(`${colors.red}✗ Parse error in ${path.basename(ruxPath)}:${colors.reset}`);
-      console.log(`  ${parseResult.error.message}`);
-      if (parseResult.error.location) {
-        console.log(`  at line ${parseResult.error.location.start.line}, column ${parseResult.error.location.start.column}`);
+      
+      // Show first few errors in console
+      const errorsToShow = Math.min(3, parseResult.errors.length);
+      for (let i = 0; i < errorsToShow; i++) {
+        const error = parseResult.errors[i];
+        if (error.location) {
+          console.log(`  Line ${error.location.start.line}: ${error.message}`);
+        } else {
+          console.log(`  ${error.message}`);
+        }
       }
+      if (parseResult.errors.length > errorsToShow) {
+        console.log(`  ... and ${parseResult.errors.length - errorsToShow} more errors`);
+      }
+      
+      // Return fallback rules if available
+      if (parseResult.fallbackRules) {
+        console.log(`${colors.yellow}⚠ Using fallback extraction for validation${colors.reset}`);
+        return parseResult.fallbackRules;
+      }
+      
       return null;
     }
     
@@ -63,11 +87,11 @@ class RubricValidator {
   }
 
   // Validate a TypeScript/JavaScript file against rules
-  validateFile(filePath, rules) {
+  validateFile(filePath, rules, moduleName) {
     if (!fs.existsSync(filePath)) {
       this.violations.push({
         file: filePath,
-        module: rules.moduleName,
+        module: moduleName,
         type: 'missing',
         severity: 'error',
         message: 'File specified in .rux does not exist'
@@ -77,17 +101,19 @@ class RubricValidator {
 
     this.checkedFiles++;
     
-    // Use the new parser-based validation
+    // Use the validation function
     const fileViolations = validateFileAgainstRules(filePath, rules);
     
-    // Add module name to violations
+    // Add module name and file path to violations
     fileViolations.forEach(violation => {
       this.violations.push({
         ...violation,
-        module: rules.moduleName,
+        module: moduleName,
         file: path.relative(process.cwd(), filePath)
       });
     });
+    
+    console.log(`  Found ${fileViolations.length} violations in TypeScript file`);
   }
 
   // Find all .rux files in project
@@ -110,14 +136,14 @@ class RubricValidator {
 
   // Main validation runner
   async run() {
-    console.log(`${colors.blue}🔍 Rubric Validator (Grammar-Based Parser)${colors.reset}`);
+    console.log(`${colors.blue}🔍 Enhanced Rubric Validator${colors.reset}`);
     console.log('=' .repeat(50));
 
     const ruxFiles = this.findRuxFiles(process.cwd());
     console.log(`Found ${ruxFiles.length} .rux files\n`);
 
     // Separate meta files from component files
-    const metaFiles = ['base.rux', 'rubric.rux', 'design-system.rux', 'GlobalSpecs.rux', 'DesignSystem.rux'];
+    const metaFiles = ['base.rux', 'rubric.rux', 'design-system.rux', 'globalspecs.rux', 'designsystem.rux'];
     const componentRuxFiles = ruxFiles.filter(f => !metaFiles.some(meta => path.basename(f).toLowerCase() === meta.toLowerCase()));
     const foundMetaFiles = ruxFiles.filter(f => metaFiles.some(meta => path.basename(f).toLowerCase() === meta.toLowerCase()));
 
@@ -138,17 +164,12 @@ class RubricValidator {
         baseRules.constraints.require.push(...globalRules.constraints.require);
         baseRules.constraints.deny.push(...globalRules.constraints.deny);
         baseRules.constraints.warn.push(...globalRules.constraints.warn);
+        baseRules.deniedImports.push(...globalRules.deniedImports);
+        baseRules.deniedOperations.push(...globalRules.deniedOperations);
       } else if (globalRules) {
         baseRules = globalRules;
       }
       console.log();
-    }
-
-    if (componentRuxFiles.length === 0) {
-      console.log(`${colors.yellow}⚠️  No component .rux files found!${colors.reset}\n`);
-      console.log('To use the validator, create .rux files for your components.');
-      console.log('Example: rubric/app/components/Button.rux\n');
-      process.exit(0);
     }
 
     // Parse and validate component files
@@ -156,7 +177,8 @@ class RubricValidator {
       const rules = this.parseAndExtractRules(ruxFile);
       
       if (!rules) {
-        continue; // Skip if parsing failed
+        console.log(`${colors.red}⚠ Skipping validation due to parse failures${colors.reset}\n`);
+        continue;
       }
       
       // Merge with base rules if they exist
@@ -164,40 +186,73 @@ class RubricValidator {
         rules.constraints.require.push(...baseRules.constraints.require);
         rules.constraints.deny.push(...baseRules.constraints.deny);
         rules.constraints.warn.push(...baseRules.constraints.warn);
+        rules.deniedImports.push(...baseRules.deniedImports);
         rules.deniedOperations.push(...baseRules.deniedOperations);
       }
       
       if (rules.location) {
         const targetFile = path.join(process.cwd(), rules.location);
-        console.log(`\nValidating ${colors.yellow}${rules.moduleName}${colors.reset} → ${rules.location}`);
-        this.validateFile(targetFile, rules);
+        console.log(`${colors.magenta}Validating TypeScript:${colors.reset} ${rules.location}`);
+        this.validateFile(targetFile, rules, rules.moduleName);
       } else {
-        console.log(`\n${colors.yellow}⚠️  ${rules.moduleName}${colors.reset} has no location specified`);
+        console.log(`${colors.yellow}⚠ ${rules.moduleName}${colors.reset} has no location specified`);
       }
+      console.log();
     }
 
-    console.log('\n' + '='.repeat(50));
+    console.log('='.repeat(50));
     this.printResults();
   }
 
   printResults() {
-    const errors = this.violations.filter(v => v.severity === 'error');
-    const warnings = this.violations.filter(v => v.severity === 'warning');
+    const syntaxErrorCount = this.syntaxErrors.reduce((sum, item) => sum + item.error.length || 1, 0);
+    const violationErrors = this.violations.filter(v => v.severity === 'error');
+    const violationWarnings = this.violations.filter(v => v.severity === 'warning');
 
-    if (this.parseErrors.length > 0) {
-      console.log(`${colors.red}❌ Parse Errors:${colors.reset}\n`);
-      for (const parseError of this.parseErrors) {
-        console.log(`${colors.red}${path.relative(process.cwd(), parseError.file)}:${colors.reset}`);
-        console.log(`  ${parseError.error.message}\n`);
+    console.log(`${colors.cyan}📊 Validation Summary${colors.reset}\n`);
+    console.log(`  .rux files processed: ${this.ruxFilesProcessed}`);
+    console.log(`  TypeScript files validated: ${this.checkedFiles}`);
+    console.log(`  Total syntax errors: ${this.syntaxErrors.length}`);
+    console.log(`  Total constraint violations: ${this.violations.length}`);
+    console.log();
+
+    // Print syntax errors
+    if (this.syntaxErrors.length > 0) {
+      console.log(`${colors.red}❌ Syntax Errors in .rux Files:${colors.reset}\n`);
+      
+      const byFile = {};
+      for (const item of this.syntaxErrors) {
+        const fileName = path.relative(process.cwd(), item.file);
+        if (!byFile[fileName]) byFile[fileName] = [];
+        
+        if (Array.isArray(item.error)) {
+          byFile[fileName].push(...item.error);
+        } else {
+          byFile[fileName].push(item.error);
+        }
+      }
+      
+      for (const [file, errors] of Object.entries(byFile)) {
+        console.log(`${colors.yellow}${file}:${colors.reset}`);
+        errors.forEach((error, index) => {
+          if (index >= 10) {
+            if (index === 10) {
+              console.log(`  ${colors.cyan}... ${errors.length - 10} more errors${colors.reset}`);
+            }
+            return;
+          }
+          
+          const lineInfo = error.location ? `:${error.location.start.line}` : '';
+          console.log(`  ${colors.red}✗${colors.reset} ${error.message}${lineInfo}`);
+        });
+        console.log();
       }
     }
 
-    if (this.violations.length === 0 && this.parseErrors.length === 0) {
-      console.log(`${colors.green}✅ All constraints passed!${colors.reset}`);
-      console.log(`Validated ${this.checkedFiles} files with 0 violations.`);
-      process.exit(0);
-    } else if (this.violations.length > 0) {
-      console.log(`${colors.red}❌ Found ${errors.length} errors and ${warnings.length} warnings:${colors.reset}\n`);
+    // Print constraint violations
+    if (this.violations.length > 0) {
+      console.log(`${colors.red}❌ Constraint Violations:${colors.reset}`);
+      console.log(`  ${violationErrors.length} errors, ${violationWarnings.length} warnings\n`);
       
       // Group violations by file
       const byFile = {};
@@ -209,23 +264,46 @@ class RubricValidator {
       // Print violations
       for (const [file, violations] of Object.entries(byFile)) {
         console.log(`${colors.yellow}${file}:${colors.reset}`);
-        for (const v of violations) {
+        
+        // Sort by line number
+        violations.sort((a, b) => (a.line || 0) - (b.line || 0));
+        
+        violations.forEach((v, index) => {
+          if (index >= 15) {
+            if (index === 15) {
+              console.log(`  ${colors.cyan}... ${violations.length - 15} more violations${colors.reset}`);
+            }
+            return;
+          }
+          
           const lineInfo = v.line ? `:${v.line}` : '';
           const icon = v.severity === 'error' ? '✗' : '⚠';
           const color = v.severity === 'error' ? colors.red : colors.yellow;
-          console.log(`  ${color}${icon}${colors.reset} [${v.module}] ${v.message}${lineInfo}`);
-        }
+          const methodLabel = v.validationMethod === 'ast' 
+            ? `${colors.green}[AST]${colors.reset}` 
+            : v.validationMethod === 'regex-fallback'
+            ? `${colors.yellow}[REG]${colors.reset}`
+            : '';
+          console.log(`  ${color}${icon}${colors.reset} ${methodLabel} [${v.module}] ${v.message}${lineInfo}`);
+        });
         console.log();
       }
+    }
 
-      process.exit(1);
+    // Final status
+    if (this.syntaxErrors.length === 0 && this.violations.length === 0) {
+      console.log(`${colors.green}✅ All checks passed!${colors.reset}`);
+      console.log(`No syntax errors or constraint violations found.`);
+      process.exit(0);
     } else {
-      // Only parse errors
+      const totalIssues = syntaxErrorCount + this.violations.length;
+      console.log(`${colors.red}❌ Found ${totalIssues} total issues${colors.reset}`);
+      console.log(`Fix the syntax errors and constraint violations above.`);
       process.exit(1);
     }
   }
 }
 
 // Run validator
-const validator = new RubricValidator();
+const validator = new EnhancedRubricValidator();
 validator.run().catch(console.error);

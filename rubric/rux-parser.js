@@ -113,13 +113,25 @@ function processConstraints(constraintsNode, rules) {
       case 'DenyConstraintRule':
         rules.constraints.deny.push(constraintData);
         // Also add to deniedOperations for backward compatibility
-        if (rule.pattern.startsWith('io.') || rule.pattern.startsWith('pattern.')) {
+        if (rule.pattern && (rule.pattern.startsWith('io.') || rule.pattern.startsWith('pattern.'))) {
           rules.deniedOperations.push(rule.pattern);
         }
         break;
       
       case 'WarnRule':
         rules.constraints.warn.push(constraintData);
+        break;
+
+      case 'DenyExportsRule':
+        rules.constraints.deny.push({
+          pattern: 'exports',
+          patterns: rule.patterns,
+          exceptions: rule.exceptions || []
+        });
+        break;
+
+      case 'DenyImportsRule':
+        rules.deniedImports.push(...rule.patterns);
         break;
     }
   }
@@ -166,14 +178,336 @@ function processState(stateNode) {
 }
 
 /**
+ * Parse a .rux file with error recovery to find multiple syntax errors
+ */
+export function parseRuxFileWithRecovery(filePath) {
+  const content = fs.readFileSync(filePath, 'utf8');
+  const lines = content.split('\n');
+  const errors = [];
+  
+  // First, try to parse the whole file
+  try {
+    const ast = parser.parse(content);
+    return { success: true, ast, errors: [] };
+  } catch (error) {
+    errors.push({
+      message: error.message,
+      location: error.location,
+      found: error.found,
+      expected: error.expected
+    });
+  }
+  
+  // If full parse failed, try to identify common syntax errors
+  const syntaxErrors = findCommonSyntaxErrors(content, lines);
+  errors.push(...syntaxErrors);
+  
+  // Try to extract what we can with regex fallback
+  const fallbackRules = extractRulesWithRegex(content, lines);
+  
+  return { 
+    success: false, 
+    errors,
+    fallbackRules 
+  };
+}
+
+/**
+ * Find common syntax errors in .rux files
+ */
+function findCommonSyntaxErrors(content, lines) {
+  const errors = [];
+  
+  lines.forEach((line, index) => {
+    const lineNum = index + 1;
+    const trimmed = line.trim();
+    
+    // Check for quoted annotations
+    if (trimmed.startsWith('@ "') || trimmed.startsWith('@"')) {
+      errors.push({
+        message: 'Annotations should not be quoted',
+        location: { start: { line: lineNum, column: line.indexOf('@') + 1 } }
+      });
+    }
+    
+    // Check for unquoted type/location/version values
+    if (trimmed.startsWith('type:') && !trimmed.includes('"') && !trimmed.includes("'")) {
+      errors.push({
+        message: 'type value must be quoted',
+        location: { start: { line: lineNum, column: line.indexOf(':') + 2 } }
+      });
+    }
+    
+    if (trimmed.startsWith('location:') && !trimmed.includes('"') && !trimmed.includes("'")) {
+      errors.push({
+        message: 'location value must be quoted',
+        location: { start: { line: lineNum, column: line.indexOf(':') + 2 } }
+      });
+    }
+    
+    if (trimmed.startsWith('version:') && !trimmed.includes('"') && !trimmed.includes("'")) {
+      errors.push({
+        message: 'version value must be quoted',
+        location: { start: { line: lineNum, column: line.indexOf(':') + 2 } }
+      });
+    }
+    
+    // Check for function parameters
+    if (trimmed.includes('function') && trimmed.includes('(') && !trimmed.includes('()')) {
+      const match = trimmed.match(/function\s+\w+\s*\([^)]+\)/);
+      if (match) {
+        errors.push({
+          message: 'Functions in interface should not have parameters, use empty parentheses ()',
+          location: { start: { line: lineNum, column: line.indexOf('(') + 1 } }
+        });
+      }
+    }
+    
+    // Check for generic syntax
+    if (trimmed.includes('<') && trimmed.includes('>') && !trimmed.includes('>=') && !trimmed.includes('<=')) {
+      errors.push({
+        message: 'Generic type syntax (e.g., Array<Type>) is not supported',
+        location: { start: { line: lineNum, column: line.indexOf('<') + 1 } }
+      });
+    }
+    
+    // Check for state property initializers
+    if (trimmed.match(/^\s*(private|protected|public)?\s*(static)?\s*(readonly)?\s*\w+\s*:\s*\w+\s*=\s*/)) {
+      errors.push({
+        message: 'State properties should not have initializers',
+        location: { start: { line: lineNum, column: line.indexOf('=') + 1 } }
+      });
+    }
+    
+    // Check for union types
+    if (trimmed.includes('|') && trimmed.includes(':') && !trimmed.includes('||')) {
+      const colonIndex = trimmed.indexOf(':');
+      const pipeIndex = trimmed.indexOf('|');
+      if (pipeIndex > colonIndex) {
+        errors.push({
+          message: 'Union types are not supported',
+          location: { start: { line: lineNum, column: line.indexOf('|') + 1 } }
+        });
+      }
+    }
+    
+    // Check for 'allow' keyword in constraints block
+    const inConstraints = isInBlock(lines, index, 'constraints');
+    if (inConstraints && trimmed.startsWith('allow ')) {
+      errors.push({
+        message: "'allow' is not valid in constraints block",
+        location: { start: { line: lineNum, column: line.indexOf('allow') + 1 } }
+      });
+    }
+    
+    // Check for incorrectly quoted 'external' keyword
+    if (trimmed.includes('as "external"') || trimmed.includes("as 'external'")) {
+      errors.push({
+        message: "'external' is a keyword and should not be quoted",
+        location: { start: { line: lineNum, column: line.indexOf('external') + 1 } }
+      });
+    }
+    
+    // Check for unquoted paths in import arrays
+    const importsBlock = isInBlock(lines, index, 'imports');
+    if (importsBlock && trimmed.includes('[')) {
+      const arrayMatch = trimmed.match(/\[([^\]]+)\]/);
+      if (arrayMatch) {
+        const items = arrayMatch[1].split(',');
+        items.forEach((item, idx) => {
+          const cleanItem = item.trim();
+          // Check if it starts with a path character but isn't quoted
+          if ((cleanItem.startsWith('../') || cleanItem.startsWith('./') || cleanItem.startsWith('/')) 
+              && !cleanItem.startsWith('"') && !cleanItem.startsWith("'")) {
+            errors.push({
+              message: 'Paths in arrays should be quoted',
+              location: { start: { line: lineNum, column: line.indexOf(cleanItem) + 1 } }
+            });
+          }
+        });
+      }
+    }
+    
+    // Check for missing types in state properties
+    const stateBlock = isInBlock(lines, index, 'state');
+    if (stateBlock && trimmed.match(/^\s*(private|protected|public)?\s*\w+\s*$/)) {
+      errors.push({
+        message: 'State property missing type declaration',
+        location: { start: { line: lineNum, column: 1 } }
+      });
+    }
+    
+    // Check for 'when' conditional constraints
+    if (trimmed.includes(' when ')) {
+      errors.push({
+        message: "Conditional constraints with 'when' are not supported",
+        location: { start: { line: lineNum, column: line.indexOf('when') + 1 } }
+      });
+    }
+    
+    // Check for inline comments after annotations
+    if (trimmed.startsWith('@') && trimmed.includes('"') && trimmed.lastIndexOf('"') < trimmed.length - 1) {
+      const afterQuote = trimmed.substring(trimmed.lastIndexOf('"') + 1).trim();
+      if (afterQuote && !afterQuote.startsWith('//')) {
+        errors.push({
+          message: 'Unexpected content after annotation',
+          location: { start: { line: lineNum, column: trimmed.lastIndexOf('"') + 2 } }
+        });
+      }
+    }
+  });
+  
+  return errors;
+}
+
+/**
+ * Helper to check if a line is within a specific block
+ */
+function isInBlock(lines, lineIndex, blockType) {
+  let depth = 0;
+  let inBlock = false;
+  
+  for (let i = 0; i <= lineIndex; i++) {
+    const line = lines[i].trim();
+    if (line.startsWith(blockType + ' ') || line === blockType) {
+      inBlock = true;
+    }
+    if (line.includes('{')) depth++;
+    if (line.includes('}')) {
+      depth--;
+      if (depth === 0) inBlock = false;
+    }
+  }
+  
+  return inBlock;
+}
+
+/**
+ * Fallback regex-based extraction when parser fails
+ */
+function extractRulesWithRegex(content, lines) {
+  const rules = {
+    moduleName: '',
+    type: '',
+    location: '',
+    allowedImports: [],
+    deniedImports: [],
+    deniedOperations: [],
+    constraints: {
+      require: [],
+      deny: [],
+      warn: []
+    },
+    interface: {},
+    state: {}
+  };
+  
+  // Extract module name
+  const moduleMatch = content.match(/module\s+(\w+)\s*{/);
+  if (moduleMatch) {
+    rules.moduleName = moduleMatch[1];
+  }
+  
+  // Extract type (try both quoted and unquoted)
+  const typeMatch = content.match(/type:\s*["']?([^"'\n\s]+)["']?/);
+  if (typeMatch) {
+    rules.type = typeMatch[1].trim();
+  }
+  
+  // Extract location (try both quoted and unquoted)
+  const locationMatch = content.match(/location:\s*["']?([^"'\n\s]+)["']?/);
+  if (locationMatch) {
+    rules.location = locationMatch[1].trim();
+  }
+  
+  // Extract constraints
+  const constraintsMatch = content.match(/constraints\s*{([^}]+)}/);
+  if (constraintsMatch) {
+    const constraintLines = constraintsMatch[1].split('\n');
+    constraintLines.forEach(line => {
+      const trimmed = line.trim();
+      
+      // Skip comments and annotations
+      if (trimmed.startsWith('@') || trimmed.startsWith('//')) return;
+      
+      // Deny rules (handle quoted and unquoted patterns)
+      if (trimmed.startsWith('deny ')) {
+        const rest = trimmed.substring(5);
+        
+        // Check for deny imports/exports with array
+        if (rest.startsWith('imports ')) {
+          const patterns = extractArrayPatterns(rest);
+          rules.deniedImports.push(...patterns);
+        } else if (rest.startsWith('exports ')) {
+          const patterns = extractArrayPatterns(rest);
+          rules.constraints.deny.push({ 
+            pattern: 'exports',
+            patterns: patterns 
+          });
+        } else {
+          // Regular deny pattern (quoted or unquoted)
+          const quotedMatch = rest.match(/^"([^"]+)"/);
+          const unquotedMatch = rest.match(/^([\w\.\*]+)/);
+          const pattern = quotedMatch ? quotedMatch[1] : (unquotedMatch ? unquotedMatch[1] : null);
+          
+          if (pattern) {
+            rules.constraints.deny.push({ pattern });
+          }
+        }
+      }
+    });
+  }
+  
+  return rules;
+}
+
+function extractPattern(str) {
+  // Try to extract pattern before any operator or comment
+  const match = str.match(/^([\w\.\*\[\]]+)/);
+  return match ? match[1] : null;
+}
+
+function extractArrayPatterns(str) {
+  const patterns = [];
+  const match = str.match(/\[([^\]]+)\]/);
+  if (match) {
+    const items = match[1].split(',');
+    items.forEach(item => {
+      const cleaned = item.trim().replace(/["']/g, '');
+      if (cleaned) patterns.push(cleaned);
+    });
+  }
+  return patterns;
+}
+
+function extractFirstQuotedOrPath(str) {
+  const quotedMatch = str.match(/["']([^"']+)["']/);
+  if (quotedMatch) return quotedMatch[1];
+  
+  const pathMatch = str.match(/^([\w\.\-\/]+)/);
+  return pathMatch ? pathMatch[1] : null;
+}
+
+/**
  * Validate a TypeScript/JavaScript file against parsed rules
  */
 export function validateFileAgainstRules(filePath, rules) {
   const violations = [];
+  
+  if (!fs.existsSync(filePath)) {
+    return [{
+      type: 'missing',
+      severity: 'error',
+      message: 'File does not exist',
+      line: 0
+    }];
+  }
+  
   const content = fs.readFileSync(filePath, 'utf8');
-
+  const lines = content.split('\n');
+  
   try {
-    // Parse TypeScript/JavaScript file into AST
+    // Try AST-based validation first
     const ast = parse(content, {
       jsx: true,
       loc: true,
@@ -205,32 +539,12 @@ export function validateFileAgainstRules(filePath, rules) {
     violations.push(...astViolations);
 
   } catch (parseError) {
-    // Fallback to regex-based validation for problematic files
-    console.warn(`AST parsing failed for ${filePath}, falling back to regex`);
-    
-    // Check constraints with regex fallback
-    for (const constraint of rules.constraints.deny) {
-      const violation = checkConstraintViolationRegex(content, constraint, 'error');
-      if (violation) {
-        violations.push(violation);
-      }
-    }
-
-    for (const constraint of rules.constraints.warn) {
-      const violation = checkConstraintViolationRegex(content, constraint, 'warning');
-      if (violation) {
-        violations.push(violation);
-      }
-    }
-
-    for (const constraint of rules.constraints.require) {
-      const violation = checkRequiredPatternRegex(content, constraint, filePath);
-      if (violation) {
-        violations.push(violation);
-      }
-    }
+    // Fallback to regex-based validation
+    console.warn(`  AST parsing failed for TypeScript file, using regex fallback`);
+    const regexViolations = validateWithRegex(content, lines, rules);
+    violations.push(...regexViolations);
   }
-
+  
   return violations;
 }
 
@@ -264,6 +578,131 @@ function validateWithAST(ast, content, rules) {
 }
 
 /**
+ * Regex-based validation fallback
+ */
+function validateWithRegex(content, lines, rules) {
+  const violations = [];
+  
+  // Check imports
+  lines.forEach((line, index) => {
+    if (line.includes('import ')) {
+      const importMatch = line.match(/from\s+['"]([^'"]+)['"]/);
+      if (importMatch) {
+        const importPath = importMatch[1];
+        
+        for (const deniedPattern of rules.deniedImports) {
+          const regex = new RegExp(deniedPattern.replace(/\*/g, '.*'));
+          if (regex.test(importPath)) {
+            violations.push({
+              type: 'import',
+              severity: 'error',
+              message: `Import from "${importPath}" is denied`,
+              line: index + 1
+            });
+          }
+        }
+      }
+    }
+  });
+  
+  // Check denied operations
+  for (const operation of rules.deniedOperations) {
+    if (operation.includes('console')) {
+      lines.forEach((line, index) => {
+        if (line.includes('console.')) {
+          violations.push({
+            type: 'operation',
+            severity: 'error',
+            message: `Console operations are denied (${operation})`,
+            line: index + 1
+          });
+        }
+      });
+    }
+    
+    if (operation.includes('localStorage')) {
+      lines.forEach((line, index) => {
+        if (line.includes('localStorage')) {
+          violations.push({
+            type: 'operation',
+            severity: 'error',
+            message: `localStorage operations are denied`,
+            line: index + 1
+          });
+        }
+      });
+    }
+  }
+  
+  // Check other constraints
+  for (const constraint of rules.constraints.deny) {
+    if (constraint.pattern === 'io.*') {
+      // Check for various IO operations
+      lines.forEach((line, index) => {
+        if (line.includes('alert(') || line.includes('document.') || line.includes('window.')) {
+          violations.push({
+            type: 'constraint',
+            severity: 'error',
+            message: `IO operations are denied (${constraint.pattern})`,
+            line: index + 1
+          });
+        }
+      });
+    }
+    
+    if (constraint.pattern === 'exports' && constraint.patterns) {
+      // Check for denied exports
+      lines.forEach((line, index) => {
+        if (line.startsWith('export ')) {
+          for (const pattern of constraint.patterns) {
+            if (pattern === '_*' && line.includes('_')) {
+              violations.push({
+                type: 'export',
+                severity: 'error',
+                message: 'Exports starting with underscore are denied',
+                line: index + 1
+              });
+            }
+          }
+        }
+      });
+    }
+  }
+  
+  // Check line count warning
+  for (const constraint of rules.constraints.warn) {
+    if (constraint.pattern === 'file.lines' && constraint.comparison) {
+      const limit = parseInt(constraint.comparison.value);
+      if (lines.length > limit) {
+        violations.push({
+          type: 'constraint',
+          severity: 'warning',
+          message: `File exceeds ${limit} lines (has ${lines.length})`,
+          line: lines.length
+        });
+      }
+    }
+  }
+  
+  // Check for required patterns
+  for (const constraint of rules.constraints.require) {
+    if (constraint.pattern === 'pattern.accessibility') {
+      const hasAria = content.includes('aria-');
+      if (!hasAria) {
+        violations.push({
+          type: 'constraint',
+          severity: 'warning',
+          message: 'Missing accessibility attributes (pattern.accessibility)',
+          line: 1
+        });
+      }
+    }
+  }
+  
+  return violations;
+}
+
+/**
  * Simple AST traversal function
  */
 function traverse(node, visitors) {
@@ -293,17 +732,16 @@ function createDenyConstraintVisitors(context) {
   for (const constraint of context.rules.constraints.deny) {
     const { pattern } = constraint;
     
-    if (pattern.startsWith('io.console')) {
+    if (pattern && pattern.startsWith('io.console')) {
       visitors.CallExpression = visitors.CallExpression || [];
       visitors.CallExpression.push((node) => {
         if (node.callee.type === 'MemberExpression' &&
             node.callee.object.name === 'console') {
-          const line = context.lines[node.loc.start.line - 1];
           context.violations.push({
             type: 'constraint',
             severity: 'error',
             message: `Console operations are denied (${pattern})`,
-            line: node.loc.start.line
+            line: context.lines.slice(0, node.loc.start.line).length
           });
         }
       });
@@ -326,7 +764,6 @@ function createDenyConstraintVisitors(context) {
 }
 
 function createRequiredConstraintVisitors(context) {
-  // Check for required patterns
   const visitors = {};
   
   for (const constraint of context.rules.constraints.require) {
@@ -375,44 +812,6 @@ function createImportConstraintVisitors(context) {
   };
   
   return visitors;
-}
-
-// Regex fallback functions
-function checkConstraintViolationRegex(content, constraint, severity) {
-  const { pattern, comment } = constraint;
-  
-  if (pattern.startsWith('io.console')) {
-    const consoleRegex = /console\.\w+\(/g;
-    const match = consoleRegex.exec(content);
-    if (match) {
-      return {
-        type: 'constraint',
-        severity,
-        message: comment || `Console operations are denied (${pattern})`,
-        line: getLineNumber(content, match.index)
-      };
-    }
-  }
-  
-  return null;
-}
-
-function checkRequiredPatternRegex(content, constraint, filePath) {
-  const { pattern, comment } = constraint;
-  
-  if (pattern === 'pattern.accessibility') {
-    const hasAria = /aria-\w+=/g.test(content);
-    if (!hasAria) {
-      return {
-        type: 'constraint',
-        severity: 'warning',
-        message: comment || 'Missing accessibility attributes (pattern.accessibility)',
-        line: 1
-      };
-    }
-  }
-  
-  return null;
 }
 
 function getLineNumber(content, index) {
