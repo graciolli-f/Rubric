@@ -1,17 +1,17 @@
 {
   "name": "rubric",
-  "type": "module",
+  "type": "module", 
   "version": "1.1.0",
   "main": "rux-parser-generated.js",
   "scripts": {
+    "build-parser": "peggy --format es -o rux-parser-generated.js simplified-rux.pegjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
+  "devDependencies": {
+    "peggy": "^5.0.0"
+  },
   "dependencies": {
-    "@typescript-eslint/typescript-estree": "^8.42.0",
+    "@typescript-eslint/typescript-estree": "^8.42.0", 
     "@typescript-eslint/visitor-keys": "^8.42.0"
   }
 }
