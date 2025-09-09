@@ -1,2 +1,6 @@
 directory-tree.txt
-scripts/release.sh
+test-files/
+scripts/
+node_modules/
+package-lock.json
+.DS_Store

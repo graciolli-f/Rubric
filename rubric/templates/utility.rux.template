@@ -1,92 +1,65 @@
-module [UtilityName]Utils {
-  @ "Pure utility functions for [purpose]"
-  @ "No side effects, deterministic outputs"
+module UtilityNameUtils {
+  @ Pure utility functions for purpose
+  @ No side effects, deterministic outputs
 
   type: "utility"
   
-  location: "src/utils/[utility-name].ts"
+  location: "src/utils/utility-name.ts"
   
   interface {
-    @ "Formatting functions"
-    public format[Something](value: [InputType]) -> string
-    public parse[Something](text: string) -> [OutputType]
+    @ Formatting functions
+    function formatSomething() -> string
+    function parseSomething() -> OutputType
     
-    @ "Validation functions"
-    public validate[Something](value: [InputType]) -> boolean
-    public is[Condition](value: unknown) -> boolean
+    @ Validation functions
+    function validateSomething() -> boolean
+    function isCondition() -> boolean
     
-    @ "Transformation functions"
-    public transform[Input]To[Output](input: [InputType]) -> [OutputType]
-    public normalize[Data](data: [DataType]) -> [NormalizedType]
+    @ Transformation functions
+    function transformInputToOutput() -> OutputType
+    function normalizeData() -> NormalizedType
     
-    @ "Calculation functions"
-    public calculate[Metric](params: [Params]) -> number
-    public aggregate[Data](items: [Item][]) -> [Summary]
+    @ Calculation functions
+    function calculateMetric() -> number
+    function aggregateData() -> Summary
     
-    @ "Helper types and constants"
-    public readonly [CONSTANT_NAME]: [ConstantType]
-    public type [HelperType] = [TypeDefinition]
+    @ Helper types and constants
+    readonly CONSTANT_NAME: ConstantType
+    type HelperType
   }
   
   state {
-    @ "No mutable state allowed in utilities"
-    @ "Use module-level constants instead"
-    private readonly CONFIG = { [config]: [value] }
-    private readonly REGEX_PATTERNS = { [pattern]: /[regex]/ }
+    @ No mutable state allowed in utilities
+    @ Use module-level constants instead
+    private readonly CONFIG: Object
+    private readonly REGEX_PATTERNS: Object
   }
   
   imports {
-    @ "Types only"
-    allow "../types" as types
-    
-    @ "Pure external libraries"
+    allow "../types"
     allow "date-fns" as external
     allow "lodash" as external
     allow "ramda" as external
-    
-    @ "Other utilities for composition"
-    allow "./[other-util]" as {[specific, functions]}
-    
-    @ "No framework imports"
+    allow "./other-util"
     deny imports ["react", "vue", "@angular/*"]
-    
-    @ "No side-effect imports"
     deny imports ["../stores/*", "../services/*", "../data/*"]
-    
-    @ "No component imports"
     deny imports ["../components/*"]
   }
   
   constraints {
-    @ "Pure functions only"
-    deny io.*  @ "No I/O operations"
+    deny io.*
     deny pattern.side_effects
     deny pattern.mutations
-    
-    @ "No async operations"
     deny pattern.async
     deny pattern.promises
-    
-    @ "Deterministic behavior"
     require pattern.deterministic
     deny pattern.random_without_seed
-    deny pattern.date_now @ "Use passed timestamps"
-    
-    @ "Error handling"
-    require pattern.defensive @ "Validate inputs"
-    
-    @ "Documentation"
-    require pattern.jsdoc @ "Document complex functions"
-    
-    @ "Testing"
+    deny pattern.date_now
+    require pattern.defensive
+    require pattern.jsdoc
     require pattern.unit_testable
-    
-    @ "Export all public functions"
     require exports ["[!_]*"]
-    
-    @ "Size constraints"
     warn file.lines > 200
     deny file.lines > 400
-    warn function.lines > 20
   }
 }

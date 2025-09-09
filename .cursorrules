@@ -1,9 +1,10 @@
 **DO FIRST:**
 BEFORE planning or writing any code, extract the rules from these files:
 1. @rubric/RUBRIC.md 
-2. @rubric/ARCHITECTURE.yaml 
-3. @rubric/GlobalSpecs.rux  
-4. @rubric/DesignSystem.rux
+2. @rubric/RUX-SYNTAX-SPEC.md
+3. @rubric/ARCHITECTURE.yaml 
+4. @rubric/GlobalSpecs.rux  
+5. @rubric/DesignSystem.rux
 THEN incorportate these rules into all future coding plans.
 
 **MANDATORY PROCEDURE - MUST CONFIRM EACH STEP AND TRACK WORKFLOW STATE:**
@@ -12,7 +13,7 @@ Before you begin, you MUST:
 **WORKFLOW:**
 ```
 1. CREATE .rux file first if one does not already exist (use corresponding template in `rubric/templates/[type].rux.template`) 
-2. RUN `rubric/validate.js` to ensure .rux files are properly formatted
+2. RUN `rubric/validate.js` to ensure .rux files are properly formatted after each .rux file is created
 3. PLAN code to fit constraints  
 4. WRITE code following the spec in the rux file AND in the GlobalSpecs.rux file
 5. RUN through the "Common Bug Prevention Checklist" in the `rubric/RUBRIC.md` file and fix any issues
